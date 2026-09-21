@@ -12,19 +12,59 @@ struct SearchView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 23, weight: .medium)).foregroundStyle(.secondary)
+                if model.isChat {
+                    Text("Codex")
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                        .accessibilityLabel("Codex mode")
+                } else {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 23, weight: .medium)).foregroundStyle(.secondary)
+                }
                 SearchField(text: $model.query, enabled: model.detail == nil,
+                    placeholder: model.isChat ? "Ask Codex…" : "Search apps and contacts",
                     onMove: model.moveSelection, onSubmit: model.activateSelection,
                     onEscape: escape)
                     .frame(height: 42)
-                    .accessibilityLabel("Search applications and contacts")
+                if model.isChat {
+                    Button(action: model.activateSelection) {
+                        Image(systemName: "arrow.up.right").frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!model.hasQuery || model.openingChat)
+                    .help("Start Codex in Ghostty with full access")
+                    .accessibilityLabel("Start Codex in Ghostty with full access")
+                }
                 Button(action: escape) { KeyCap(text: "esc") }
                     .buttonStyle(.plain).frame(width: 40, height: 40)
-                    .help(model.detail == nil ? "Close search" : "Back to results")
-                    .accessibilityLabel(model.detail == nil ? "Close search" : "Back to results")
+                    .help(model.isChat ? "Exit Codex mode" : model.detail == nil ? "Close search" : "Back to results")
+                    .accessibilityLabel(model.isChat ? "Exit Codex mode" : model.detail == nil ? "Close search" : "Back to results")
             }
             .padding(.horizontal, 24).padding(.vertical, 17)
+            if model.isChat {
+                HStack {
+                    Text(model.openingChat ? "Opening Ghostty…" : "↵ Ask in Ghostty · Codex full access (--yolo)")
+                    Spacer()
+                    Text("esc Back to search")
+                }
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .padding(.horizontal, 24).frame(height: 36)
+                if let error = model.error {
+                    Text(error).font(.system(size: 12)).foregroundStyle(.red)
+                        .padding(.horizontal, 24).frame(height: 38)
+                }
+            } else if model.showsResults { expandedContent }
+        }
+        .frame(width: 740, height: model.panelHeight, alignment: .top)
+        // Clip the full layout to the animating window, revealing it downward
+        // without moving the search field or squeezing the result rows.
+        .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
+    }
+
+    @ViewBuilder private var expandedContent: some View {
             Divider().opacity(0.5)
 
             if let contact = model.detail {
@@ -40,7 +80,7 @@ struct SearchView: View {
                     .help("All: ⌥⌘0 · Apps: ⌥⌘1 · Contacts: ⌥⌘2")
                     Spacer()
                     if model.indexing { ProgressView().controlSize(.small) }
-                    Text(model.query.isEmpty ? "Quick access" : "\(model.results.count) results")
+                    Text("\(model.results.count) results")
                         .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
                 }.padding(.horizontal, 16).padding(.vertical, 8)
 
@@ -71,13 +111,10 @@ struct SearchView: View {
             }
             Divider().opacity(0.5)
             footer
-        }
-        .frame(width: 740, height: 556)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
     }
 
     private func escape() {
-        if model.detail != nil { model.detail = nil } else { model.dismiss?() }
+        model.escape()
     }
 
     @ViewBuilder private var contactsNotice: some View {
@@ -177,7 +214,7 @@ struct SearchView: View {
     private var footer: some View {
         HStack(spacing: 6) {
             Text("Iron Search").font(.system(size: 11))
-            KeyCap(text: "⌘1")
+            KeyCap(text: "⌘Space")
             if !model.shortcutAvailable {
                 Text("· Shortcut in use; use menu bar").font(.system(size: 10)).foregroundStyle(.orange)
             }
@@ -264,6 +301,7 @@ private struct KeyCap: View {
 private struct SearchField: NSViewRepresentable {
     @Binding var text: String
     let enabled: Bool
+    let placeholder: String
     let onMove: (Int) -> Void
     let onSubmit: () -> Void
     let onEscape: () -> Void
@@ -275,15 +313,23 @@ private struct SearchField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 30, weight: .regular)
-        field.placeholderString = "Search apps and contacts"
+        field.placeholderString = placeholder
         field.delegate = context.coordinator
-        field.setAccessibilityLabel("Search applications and contacts")
+        field.setAccessibilityLabel(placeholder)
         field.lineBreakMode = .byTruncatingTail
         return field
     }
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
-        if field.stringValue != text { field.stringValue = text }
+        if field.stringValue != text {
+            field.stringValue = text
+            if let editor = field.currentEditor() {
+                editor.string = text
+                editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            }
+        }
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder)
         let becameEnabled = enabled && !context.coordinator.wasEnabled
         context.coordinator.wasEnabled = enabled
         field.isEnabled = enabled
@@ -300,7 +346,18 @@ private struct SearchField: NSViewRepresentable {
         init(_ parent: SearchField) { self.parent = parent }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
-            parent.text = field.stringValue
+            let entered = field.stringValue
+            parent.text = entered
+            // Consume the alias synchronously, before another keystroke arrives.
+            // Waiting for SwiftUI's render can leave "ask " in a fast-typed prompt.
+            let canonical = parent.text
+            if canonical != entered {
+                field.stringValue = canonical
+                if let editor = field.currentEditor() {
+                    editor.string = canonical
+                    editor.selectedRange = NSRange(location: (canonical as NSString).length, length: 0)
+                }
+            }
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             switch selector {

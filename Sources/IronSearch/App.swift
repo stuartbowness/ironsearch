@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import QuartzCore
 import SwiftUI
 
 @main
@@ -25,10 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private var hotKey: GlobalHotKey?
     private var keyMonitor: Any?
+    private var requestedHeight: CGFloat = 76
+    private var showingPanel = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         makeMainMenu()
-        panel = SearchPanel(contentRect: NSRect(x: 0, y: 0, width: 740, height: 556),
+        panel = SearchPanel(contentRect: NSRect(x: 0, y: 0, width: 740, height: model.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Iron Search"
         panel.isReleasedWhenClosed = false
@@ -39,18 +42,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: SearchView(model: model))
+        let hostingView = NSHostingView(rootView: SearchView(model: model))
+        hostingView.sizingOptions = []
+        panel.contentView = hostingView
         model.dismiss = { [weak self] in self?.hide() }
+        model.presentationChanged = { [weak self] in self?.resizePanel() }
         makeStatusMenu()
         hotKey = GlobalHotKey { [weak self] in self?.toggle() }
         model.shortcutAvailable = hotKey?.registered == true
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.panel.isKeyWindow else { return event }
             if event.keyCode == 53 {
-                if self.model.detail != nil { self.model.detail = nil } else { self.hide() }
+                self.model.escape()
                 return nil
             }
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command, .option] {
+            if self.model.showsResults,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command, .option] {
                 switch event.charactersIgnoringModifiers {
                 case "0": self.model.scope = .all; return nil
                 case "1": self.model.scope = .applications; return nil
@@ -89,9 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func makeStatusMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "magnifyingglass.circle", accessibilityDescription: "Iron Search")
-        statusItem.button?.toolTip = "Iron Search · ⌘1"
+        statusItem.button?.toolTip = "Iron Search · ⌘Space"
         let menu = NSMenu()
-        let showItem = menu.addItem(withTitle: "Search Apps & Contacts    ⌘1", action: #selector(showFromMenu), keyEquivalent: "")
+        let showItem = menu.addItem(withTitle: "Search Apps & Contacts    ⌘Space", action: #selector(showFromMenu), keyEquivalent: "")
         showItem.target = self
         menu.addItem(.separator())
         let refreshItem = menu.addItem(withTitle: "Refresh Apps & Contacts", action: #selector(refresh), keyEquivalent: "")
@@ -109,12 +116,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func show() {
-        model.query = ""
+        showingPanel = true
+        defer { showingPanel = false }
+        model.resetSearch()
         model.detail = nil
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         if let frame = screen?.visibleFrame {
+            // Anchor the search field in the upper quarter of the usable screen.
+            // AppKit coordinates grow upward; results expand below this top edge.
+            let searchCenterY = frame.minY + frame.height * 0.75
+            let panelTop = searchCenterY + model.panelHeight / 2
+            model.expandedPanelHeight = min(556, panelTop - frame.minY - 12)
             panel.setFrameOrigin(NSPoint(x: frame.midX - panel.frame.width / 2,
-                y: frame.midY - panel.frame.height / 2))
+                y: searchCenterY - model.panelHeight / 2))
         }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -133,6 +147,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         for child in view.subviews { focusSearch(in: child) }
+    }
+
+    private func resizePanel() {
+        guard requestedHeight != model.panelHeight else { return }
+        requestedHeight = model.panelHeight
+        var frame = panel.frame
+        frame.origin.y += frame.height - model.panelHeight
+        frame.size.height = model.panelHeight
+        let animate = panel.isVisible && !showingPanel
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animate ? 0.18 : 0
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 
     private func hide() { panel.orderOut(nil) }
@@ -164,7 +193,7 @@ final class GlobalHotKey {
         }, 1, &eventType, context, &handler)
         guard handlerStatus == noErr else { return }
         let identifier = EventHotKeyID(signature: 0x49524F4E, id: 1)
-        registered = RegisterEventHotKey(UInt32(kVK_ANSI_1), UInt32(cmdKey), identifier,
+        registered = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), identifier,
             GetApplicationEventTarget(), 0, &reference) == noErr
     }
 

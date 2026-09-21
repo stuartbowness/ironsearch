@@ -19,7 +19,14 @@ enum ContactsState: Equatable {
 
 @MainActor
 final class SearchModel: ObservableObject {
-    @Published var query = "" { didSet { updateResults() } }
+    @Published private(set) var input = LauncherInput()
+    var query: String {
+        get { input.text }
+        set { input.edit(newValue); updateResults() }
+    }
+    var isChat: Bool { input.isChat }
+    var showsResults: Bool { hasQuery && !isChat }
+    @Published private(set) var openingChat = false
     @Published var scope: SearchScope = .all { didSet { updateResults() } }
     @Published private(set) var results: [SearchItem] = []
     @Published var selectedID: String?
@@ -31,6 +38,10 @@ final class SearchModel: ObservableObject {
     @Published var copiedField: String?
     @Published private(set) var appCount = 0
     var dismiss: (() -> Void)?
+    var presentationChanged: (() -> Void)?
+    var hasQuery: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var expandedPanelHeight: CGFloat = 556
+    var panelHeight: CGFloat { isChat ? (error == nil ? 112 : 150) : hasQuery ? expandedPanelHeight : 76 }
     private var applications: [SearchItem] = []
     private var contacts: [SearchItem] = []
     private var recents = UserDefaults.standard.stringArray(forKey: "recentApplications") ?? []
@@ -108,8 +119,8 @@ final class SearchModel: ObservableObject {
     }
 
     func updateResults(preserveSelection: Bool = false) {
-        results = SearchEngine.search(applications + contacts, query: query, kind: scope.kind,
-                                      recents: recents, limit: query.isEmpty ? 8 : 40)
+        results = showsResults ? SearchEngine.search(applications + contacts, query: query, kind: scope.kind,
+                                                recents: recents, limit: 40) : []
         if !preserveSelection || !results.contains(where: { $0.id == selectedID }) {
             selectedID = results.first?.id
         }
@@ -117,6 +128,7 @@ final class SearchModel: ObservableObject {
             detail = nil
             error = nil
         }
+        presentationChanged?()
     }
 
     func moveSelection(_ delta: Int) {
@@ -126,8 +138,74 @@ final class SearchModel: ObservableObject {
     }
 
     func activateSelection() {
+        if isChat { openCodex(); return }
         guard detail == nil, let item = results.first(where: { $0.id == selectedID }) else { return }
         activate(item)
+    }
+
+    func resetSearch() {
+        input.reset()
+        scope = .all
+        updateResults()
+    }
+
+    func escape() {
+        if detail != nil {
+            detail = nil
+        } else if isChat {
+            input.exitChat()
+            updateResults()
+        } else {
+            dismiss?()
+        }
+    }
+
+    private func openCodex() {
+        guard !openingChat, hasQuery else { return }
+        let manager = FileManager.default
+        let home = manager.homeDirectoryForCurrentUser
+        let candidates = [URL(fileURLWithPath: "/Applications/Ghostty.app"),
+            home.appendingPathComponent("Applications/Ghostty.app")]
+        let app = candidates.first { Bundle(url: $0)?.bundleIdentifier == "com.mitchellh.ghostty" }
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty")
+        guard let app else {
+            error = "Install Ghostty in Applications, then try again."
+            presentationChanged?()
+            return
+        }
+        let paths = [home.appendingPathComponent(".npm-global/bin/codex").path,
+                     home.appendingPathComponent(".local/bin/codex").path,
+                     "/opt/homebrew/bin/codex", "/usr/local/bin/codex"]
+        guard let executable = paths.first(where: { manager.isExecutableFile(atPath: $0) }) else {
+            error = "Codex CLI wasn’t found. Install it in ~/.npm-global/bin, ~/.local/bin, or with Homebrew."
+            presentationChanged?()
+            return
+        }
+        let directory = home
+        guard let arguments = CodexLaunch.arguments(prompt: query, executable: executable, directory: directory.path) else {
+            error = "The question contains an unsupported null character. Remove it and try again."
+            presentationChanged?()
+            return
+        }
+        openingChat = true
+        let submittedPrompt = query
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = true
+        configuration.arguments = arguments
+        NSWorkspace.shared.openApplication(at: app, configuration: configuration) { [weak self] _, openError in
+            Task { @MainActor in
+                guard let self else { return }
+                self.openingChat = false
+                guard self.isChat, self.query == submittedPrompt else { return }
+                if openError != nil {
+                    self.error = "Couldn’t open Ghostty. Open it once from Applications, then try again."
+                    self.presentationChanged?()
+                } else {
+                    self.dismiss?()
+                }
+            }
+        }
     }
 
     func activate(_ item: SearchItem) {
