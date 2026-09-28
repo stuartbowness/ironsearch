@@ -2,7 +2,7 @@
 
 A small, native macOS launcher for **applications and contacts**, with an explicit Codex shortcut. Press **⌘Space** from any app to open a search panel using Apple's native Liquid Glass. Requires macOS 27.0 or later.
 
-<img src="Resources/AppIcon.png" width="128" alt="Iron Search app icon: a white magnifying glass on a blue steel tile">
+<img src="Resources/AppIcon.png" width="128" alt="Iron Search app icon: a brushed iron magnifying glass with warm highlights on a graphite tile">
 
 ## Build and run
 
@@ -63,7 +63,7 @@ This runs dependency-free checks for ranking, abbreviations, accent normalizatio
 - `Sources/SearchCore`: searchable records and deterministic ranking.
 - `Sources/IronSearch`: native SwiftUI search panel, AppKit lifecycle, global hotkey, application indexing, and Contacts integration.
 - `Resources/Info.plist`: app identity and Contacts permission description.
-- `Resources/AppIcon.icns`: native multi-resolution app icon; `scripts/make-icon.swift` regenerates the vector-drawn artwork during builds.
+- `Resources/AppIcon.icns`: native multi-resolution app icon; `scripts/make-icon.swift` generates standard and Retina sizes from the approved artwork in `Resources/AppIcon.png` during builds.
 - `scripts/build.sh`: builds and signs `dist/Iron Search.app`.
 
 Inspired by the quick keyboard-driven launcher interaction in [Alfred](https://www.alfredapp.com/) and Spotlight, with a deliberately small scope.
