@@ -235,6 +235,33 @@ final class SearchModel: ObservableObject {
         }
     }
 
+    func openInContacts(_ item: SearchItem) {
+        guard item.kind == .contact, item.id.hasPrefix("contact:") else { return }
+        let identifier = String(item.id.dropFirst("contact:".count))
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-:._~"))
+        guard !identifier.isEmpty,
+              let encoded = identifier.addingPercentEncoding(withAllowedCharacters: allowed),
+              let url = URL(string: "addressbook://" + encoded),
+              let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.AddressBook") else {
+            error = "Couldn’t open this contact in Contacts."
+            return
+        }
+        error = nil
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([url], withApplicationAt: app, configuration: configuration) {
+            [weak self] _, launchError in
+            Task { @MainActor in
+                guard let self, self.detail?.id == item.id else { return }
+                if launchError != nil {
+                    self.error = "Couldn’t open this contact in Contacts. Try again."
+                } else {
+                    self.dismiss?()
+                }
+            }
+        }
+    }
+
     func copy(_ field: ContactField) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(field.value, forType: .string)
@@ -292,7 +319,8 @@ enum ContactIndex {
         let keys: [CNKeyDescriptor] = [CNContactIdentifierKey as CNKeyDescriptor,
             CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
             CNContactOrganizationNameKey as CNKeyDescriptor,
-            CNContactEmailAddressesKey as CNKeyDescriptor, CNContactPhoneNumbersKey as CNKeyDescriptor]
+            CNContactEmailAddressesKey as CNKeyDescriptor, CNContactPhoneNumbersKey as CNKeyDescriptor,
+            CNContactPostalAddressesKey as CNKeyDescriptor]
         let request = CNContactFetchRequest(keysToFetch: keys)
         request.unifyResults = true
         var items: [SearchItem] = []
@@ -303,6 +331,12 @@ enum ContactIndex {
             let phones = contact.phoneNumbers.map {
                 ContactField(label: label("Phone", $0.label), value: $0.value.stringValue)
             }
+            let addresses = contact.postalAddresses.compactMap { address -> ContactField? in
+                let value = CNPostalAddressFormatter.string(from: address.value, style: .mailingAddress)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !value.isEmpty else { return nil }
+                return ContactField(label: label("Address", address.label), value: value)
+            }
             let formatted = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
             let title = !formatted.isEmpty ? formatted : (!contact.organizationName.isEmpty
                 ? contact.organizationName : emails.first?.value ?? phones.first?.value ?? "Unnamed contact")
@@ -310,7 +344,7 @@ enum ContactIndex {
                 ? contact.organizationName : emails.first?.value ?? phones.first?.value ?? "Contact"
             // Duplicate labelled values occur in linked cards; keep SwiftUI IDs unique.
             var seen = Set<String>()
-            var fields = (emails + phones).filter { seen.insert($0.id).inserted }
+            var fields = (emails + phones + addresses).filter { seen.insert($0.id).inserted }
             if !contact.organizationName.isEmpty {
                 fields.insert(ContactField(label: "Company", value: contact.organizationName), at: 0)
             }

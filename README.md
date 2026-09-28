@@ -28,7 +28,7 @@ The build script uses standalone Apple Command Line Tools when installed, withou
 | `as ` / `ask ` | Enter Codex mode (include the trailing space) |
 | ⌥⌘0 / ⌥⌘1 / ⌥⌘2 | Filter All / Apps / Contacts |
 
-Search opens as a compact glass search box, horizontally centered about a quarter of the way down the active display's usable area. Results, filters, and keyboard hints appear only after you type, expanding smoothly below the stationary search field; clearing the query collapses the panel again. Expanded height is limited to the space above the Dock. The transition respects Reduce Motion. Whitespace alone does not reveal results. Click a result to open it. Contact details have copy buttons for email addresses, phone numbers, and company names. Clicking outside dismisses the panel.
+Search opens as a compact glass search box, horizontally centered about a quarter of the way down the active display's usable area. Results, filters, and keyboard hints appear only after you type, expanding smoothly below the stationary search field; clearing the query collapses the panel again. Expanded height is limited to the space above the Dock. The transition respects Reduce Motion. Whitespace alone does not reveal results. Click a result to open it. Contact details have copy buttons for email addresses, phone numbers, company names, and all available postal addresses. Addresses retain their home/work/custom labels and mailing format. **Open in Contacts** opens that person’s card in Apple Contacts. Clicking outside dismisses the panel.
 
 ⌘Space is reserved globally while Iron Search is running. First disable **Show Spotlight search** under System Settings → Keyboard → Keyboard Shortcuts → Spotlight. Iron Search does not change that system setting for you. Quit from the menu bar to release the shortcut. If another global shortcut already owns ⌘Space, Iron Search reports the conflict; you can still open search from its menu-bar icon.
 
@@ -36,7 +36,7 @@ Search opens as a compact glass search box, horizontally centered about a quarte
 
 - Applications are discovered recursively in `/Applications`, `~/Applications`, `/System/Applications`, and `/System/Library/CoreServices/Applications`. Safari's system Cryptex location and Finder are also included. Nested app bundles are skipped, and duplicate bundle identifiers are collapsed.
 - Contacts are read from the macOS Contacts store, including accounts synced into that app. Click **Enable contacts** and grant macOS permission. Limited access searches only the allowed contacts. Denied access leaves application search usable.
-- Search supports names, company names, email addresses, phone numbers, initials, and fuzzy app/name abbreviations. Accents and capitalization are ignored. Recently launched apps receive a small ranking boost; empty searches show nothing.
+- Search supports names, company names, email addresses, phone numbers, postal addresses, initials, and fuzzy app/name abbreviations. Accents and capitalization are ignored. Recently launched apps receive a small ranking boost; empty searches show nothing.
 - Indices refresh whenever search opens and through **Refresh Apps & Contacts** in the menu bar. Contact-store changes also trigger a refresh.
 - Contact data stays in memory. Only the identifiers of the last 20 apps launched through Iron Search are saved in local preferences. There is no telemetry, upload, or contact export. Copying a field writes it to the macOS clipboard at your request.
 

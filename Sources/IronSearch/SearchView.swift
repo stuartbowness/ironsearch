@@ -172,10 +172,18 @@ struct SearchView: View {
 
     private func contactDetail(_ contact: SearchItem) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Button { model.detail = nil } label: {
-                Label("Results", systemImage: "chevron.left").font(.system(size: 12, weight: .medium))
-                    .frame(minHeight: 40)
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
+            HStack {
+                Button { model.detail = nil } label: {
+                    Label("Results", systemImage: "chevron.left").font(.system(size: 12, weight: .medium))
+                        .frame(minHeight: 40)
+                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Spacer()
+                Button { model.openInContacts(contact) } label: {
+                    Label("Open in Contacts", systemImage: "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .medium)).frame(minHeight: 40)
+                }.buttonStyle(.plain)
+                    .help("Open this person’s card in Apple Contacts")
+            }
             HStack(spacing: 16) {
                 ContactAvatar(name: contact.title, size: 58)
                 VStack(alignment: .leading, spacing: 5) {
@@ -187,7 +195,7 @@ struct SearchView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     if contact.fields.isEmpty {
-                        Text("No email address, phone number, or company on this contact.")
+                        Text("No email address, phone number, postal address, or company on this contact.")
                             .foregroundStyle(.secondary).font(.system(size: 13)).padding(.vertical, 20)
                     }
                     ForEach(contact.fields) { field in
@@ -195,6 +203,7 @@ struct SearchView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(field.label).font(.system(size: 11)).foregroundStyle(.secondary)
                                 Text(field.value).font(.system(size: 14)).textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
                             Button { model.copy(field) } label: {
