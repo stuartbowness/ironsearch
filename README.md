@@ -7,13 +7,15 @@ A small, native macOS launcher for **applications and contacts**, with an explic
 ## Build and run
 
 ```sh
+security find-identity -v -p codesigning
+git config --local ironsearch.signingIdentity <certificate-SHA1>
 bash scripts/build.sh
 open "dist/Iron Search.app"
 ```
 
 The app lives in the menu bar. You can move the built app to Applications using Finder. To start it automatically, add it under System Settings → General → Login Items. Local search requires no dependencies, accounts, or network services. The optional Codex handoff requires Ghostty and an authenticated Codex CLI installation.
 
-The build script uses standalone Apple Command Line Tools when installed, without changing your selected Xcode. The output is locally ad-hoc signed for development, not notarized for distribution. A Developer ID and notarization would be needed for normal distribution to other Macs. Build output matches the current Mac's architecture.
+The build script uses standalone Apple Command Line Tools when installed, without changing your selected Xcode. Configure a consistent Apple Development identity for local builds using the commands above. The certificate and private key stay in Keychain; only its identifier is stored in this checkout's local Git configuration. Install Apple's WWDR G3 intermediate certificate if the development identity is missing its certificate chain. Builds fail on signing errors rather than falling back to ad-hoc signing. `IRONSEARCH_SIGNING_IDENTITY` can override the local setting; explicitly setting it to `-` produces an ad-hoc build whose Contacts permission may reset after updates. After switching from ad-hoc to certificate signing, approve Contacts once more. A Developer ID and notarization would be needed for normal distribution to other Macs. Build output matches the current Mac's architecture.
 
 ## Use
 
