@@ -1,6 +1,6 @@
 # Iron Search
 
-A small, native macOS launcher for **applications and contacts**, with an explicit Codex shortcut. Press **⌘Space** from any app to open a search panel using Apple's native Liquid Glass. Requires macOS 26 or later.
+A small, native macOS launcher for **applications and contacts**, with an explicit Codex shortcut. Press **⌘Space** from any app to open a search panel using Apple's native Liquid Glass. Requires macOS 27.0 or later.
 
 <img src="Resources/AppIcon.png" width="128" alt="Iron Search app icon: a white magnifying glass on a blue steel tile">
 

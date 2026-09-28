@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "IronSearch",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("27.0")],
     products: [.executable(name: "IronSearch", targets: ["IronSearch"])],
     targets: [
         .target(name: "SearchCore"),
