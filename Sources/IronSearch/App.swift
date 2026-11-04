@@ -44,7 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
         let hostingView = NSHostingView(rootView: SearchView(model: model))
         hostingView.sizingOptions = []
-        panel.contentView = hostingView
+        // Keep the window silhouette in AppKit, where it follows every frame of
+        // the panel resize instead of a separately sized SwiftUI glass effect.
+        let glassView = NSGlassEffectView()
+        glassView.style = .regular
+        glassView.cornerRadius = 26
+        glassView.clipsToBounds = true
+        glassView.contentView = hostingView
+        panel.contentView = glassView
         model.dismiss = { [weak self] in self?.hide() }
         model.presentationChanged = { [weak self] in self?.resizePanel() }
         makeStatusMenu()
@@ -157,11 +164,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         frame.size.height = model.panelHeight
         let animate = panel.isVisible && !showingPanel
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = animate ? 0.18 : 0
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
-        }
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                self?.refreshPanelShadow()
+            }
+        })
+    }
+
+    private func refreshPanelShadow() {
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+        panel.invalidateShadow()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        refreshPanelShadow()
     }
 
     private func hide() { panel.orderOut(nil) }

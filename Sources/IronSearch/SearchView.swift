@@ -61,7 +61,6 @@ struct SearchView: View {
         // without moving the search field or squeezing the result rows.
         .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
         .clipped()
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
     }
 
     @ViewBuilder private var expandedContent: some View {
