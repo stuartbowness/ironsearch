@@ -1,69 +1,108 @@
 # Iron Search
 
-A small, native macOS launcher for **applications and contacts**, with an explicit Codex shortcut. Press **⌘Space** from any app to open a search panel using Apple's native Liquid Glass. Requires macOS 27.0 or later.
+**A small native macOS launcher for applications and contacts.**
 
-<img src="Resources/AppIcon.png" width="128" alt="Iron Search app icon: a brushed iron magnifying glass with warm highlights on a graphite tile">
+Press **⌘Space**, type a name, and launch an app or open a contact card. Iron
+Search combines an AppKit floating panel with SwiftUI content and a pure Swift
+ranking engine. Local search runs without an account, network service, or
+third-party runtime dependencies.
 
-## Build and run
+<img src="Resources/AppIcon.png" width="112" alt="Iron Search: brushed metal magnifying glass">
+
+Built by [Stuart Bowness](https://github.com/stuartbowness). Released under the
+[MIT license](LICENSE).
+
+## Why this exists
+
+I wanted a focused launcher for two everyday actions: opening an application and
+finding someone's contact details. The implementation keeps the search algorithm
+small enough to inspect, permission handling explicit, and the desktop integration
+native. An optional `ask ` prefix hands a question to Codex in Ghostty.
+
+This repository is a source release for **macOS 27 or later**. It is not a
+notarized download, and it does not support older macOS versions.
+
+## Build and try it
+
+Requirements: macOS 27+, a compatible Swift toolchain/macOS SDK, and Apple's
+Command Line Tools or Xcode. There are no package dependencies to install.
 
 ```sh
-security find-identity -v -p codesigning
-git config --local ironsearch.signingIdentity <certificate-SHA1>
-bash scripts/build.sh
+git clone git@github.com:stuartbowness/ironsearch.git
+cd ironsearch
+bash scripts/test.sh
+IRONSEARCH_SIGNING_IDENTITY=- bash scripts/build.sh
 open "dist/Iron Search.app"
 ```
 
-The app lives in the menu bar. You can move the built app to Applications using Finder. To start it automatically, add it under System Settings → General → Login Items. Local search requires no dependencies, accounts, or network services. The optional Codex handoff requires Ghostty and an authenticated Codex CLI installation.
+This explicitly selects ad-hoc signing for a local build. Contacts permissions
+may reset after rebuilding. For regular use, configure a stable Apple signing
+identity as described in [the usage guide](docs/usage.md#build-and-run).
 
-The build script uses standalone Apple Command Line Tools when installed, without changing your selected Xcode. Configure a consistent Apple Development identity for local builds using the commands above. The certificate and private key stay in Keychain; only its identifier is stored in this checkout's local Git configuration. Install Apple's WWDR G3 intermediate certificate if the development identity is missing its certificate chain. Builds fail on signing errors rather than falling back to ad-hoc signing. `IRONSEARCH_SIGNING_IDENTITY` can override the local setting; explicitly setting it to `-` produces an ad-hoc build whose Contacts permission may reset after updates. After switching from ad-hoc to certificate signing, approve Contacts once more. A Developer ID and notarization would be needed for normal distribution to other Macs. Build output matches the current Mac's architecture.
+Disable Spotlight's **Show Spotlight search** shortcut in System Settings before
+using ⌘Space. Iron Search reports a conflict if another app owns the shortcut;
+you can still open it from the menu bar. Contacts access is optional and requested
+only when you choose **Enable contacts**.
 
-## Use
+## Everyday use
 
-| Key | Action |
+| Action | Input |
 | --- | --- |
-| ⌘Space | Show or hide search globally |
-| ↑ / ↓ | Select a result |
-| Return | Launch the app, show contact details, or start Codex in Ghostty |
-| Escape | Exit Codex mode keeping the text, back from contact details, or dismiss search |
-| `as ` / `ask ` | Enter Codex mode (include the trailing space) |
-| ⌥⌘0 / ⌥⌘1 / ⌥⌘2 | Filter All / Apps / Contacts |
+| Open search | ⌘Space or menu-bar item |
+| Find an application | Name, initials, or abbreviation |
+| Find a contact | Name, company, email, phone, or postal address |
+| Move and open | ↑ / ↓, then Return |
+| Filter All / Apps / Contacts | ⌥⌘0 / ⌥⌘1 / ⌥⌘2 |
+| Ask Codex in a new Ghostty session | `ask ` or `as ` followed by a question |
+| Go back or dismiss | Escape |
 
-Search opens as a compact glass search box, horizontally centered about a quarter of the way down the active display's usable area. Results, filters, and keyboard hints appear only after you type, expanding smoothly below the stationary search field; clearing the query collapses the panel again. Expanded height is limited to the space above the Dock. The transition respects Reduce Motion. Whitespace alone does not reveal results. Click a result to open it. Contact details have copy buttons for email addresses, phone numbers, company names, and all available postal addresses. Addresses retain their home/work/custom labels and mailing format. **Open in Contacts** opens that person’s card in Apple Contacts. Clicking outside dismisses the panel.
+Search ignores case and accents. Exact matches outrank fuzzy matches, even when
+a fuzzy match was launched recently. Empty input hides results. Contact cards
+support copying individual fields and opening the original card in Contacts.
 
-⌘Space is reserved globally while Iron Search is running. First disable **Show Spotlight search** under System Settings → Keyboard → Keyboard Shortcuts → Spotlight. Iron Search does not change that system setting for you. Quit from the menu bar to release the shortcut. If another global shortcut already owns ⌘Space, Iron Search reports the conflict; you can still open search from its menu-bar icon.
+The Codex handoff requires Ghostty and an authenticated Codex CLI. It preserves
+your sandbox and approval settings. Neither dependency is needed for local search.
 
-## Search and privacy
+## For engineers reviewing the code
 
-- Applications are discovered recursively in `/Applications`, `~/Applications`, `/System/Applications`, and `/System/Library/CoreServices/Applications`. Safari's system Cryptex location and Finder are also included. Nested app bundles are skipped, and duplicate bundle identifiers are collapsed.
-- Contacts are read from the macOS Contacts store, including accounts synced into that app. Click **Enable contacts** and grant macOS permission. Limited access searches only the allowed contacts. Denied access leaves application search usable.
-- Search supports names, company names, email addresses, phone numbers, postal addresses, initials, and fuzzy app/name abbreviations. Accents and capitalization are ignored. Recently launched apps receive a small ranking boost; empty searches show nothing.
-- Indices refresh whenever search opens and through **Refresh Apps & Contacts** in the menu bar. Contact-store changes also trigger a refresh.
-- Contact data stays in memory. Only the identifiers of the last 20 apps launched through Iron Search are saved in local preferences. There is no telemetry, upload, or contact export. Copying a field writes it to the macOS clipboard at your request.
+Start with [the architecture guide](docs/architecture.md), then read
+[`SearchEngine.swift`](Sources/SearchCore/SearchEngine.swift) and
+[`LauncherInput.swift`](Sources/SearchCore/LauncherInput.swift). The main design
+choices are:
 
-## Ask Codex in Ghostty
+- **Pure ranking core:** matching and input transitions can be checked without
+  opening a window or accessing a real contact store.
+- **Explicit concurrency:** scans run away from the main actor; stale contact
+  results cannot overwrite a newer refresh.
+- **Native window control:** AppKit owns focus, hotkeys, and geometry; SwiftUI
+  owns the content.
+- **Literal command arguments:** the terminal handoff is tested through a real
+  shell with quotes, substitutions, newlines, and Unicode in the prompt.
 
-Type `as ` or `ask ` to replace the prefix with a Codex badge. Type your question and press Return to open a **new interactive Codex session in Ghostty**, submitting the question immediately. Continue the conversation in the terminal. An empty prompt does nothing. Escape returns to local search and keeps your text; reopening Iron Search starts in local search. Names like Ashley and Asana do not trigger Codex mode.
+The tests are a dependency-free executable rather than XCTest so they can run
+with standalone Command Line Tools. CI compiles the Foundation-only core against
+the runner’s host SDK using `bash scripts/test-core.sh`; it does not build the
+macOS 27 application. [Verification](docs/verification.md) explains
+what they cover and the remaining manual checks.
 
-The command uses `codex --yolo --search --cd <home-folder> -- <question>`. **Full access is intentional: `--yolo` disables approval prompts and sandboxing. Codex can run commands and modify files without asking.** `--search` enables live web search. The starting folder is your home directory (`~/`); it is not a security boundary. Your existing Codex model, authentication, and other settings apply. Iron Search does not change folder-trust settings; Codex may ask you to approve your home folder on first use.
+## Privacy and limits
 
-Ghostty is launched as a fresh application instance so existing terminal sessions are not reused or interrupted. Codex is discovered in `~/.npm-global/bin`, `~/.local/bin`, `/opt/homebrew/bin`, or `/usr/local/bin`. A login shell supplies PATH for dependencies such as Node. A shell-quoted `--initial-command=shell:…` option avoids Ghostty 1.3.1's macOS bug that treats positional paths after `-e` as files to open. Every command argument is single-quoted with embedded quotes escaped; the question reaches Codex as literal text. New tabs use the normal shell rather than repeating the question. No clipboard or Accessibility automation is used. Missing applications and launch failures leave the prompt visible with an error; authentication or CLI startup errors appear in Ghostty. Only your explicit question is handed off, not the local contact index; Codex itself has full filesystem access and may retain session history.
+Contact data stays in memory. The app persists only the last 20 launched
+application IDs; it has no telemetry or contact export. Copying a field writes
+to the macOS clipboard. The optional Codex integration passes your explicit
+question only and is subject to Codex's own configuration and data handling.
 
-## Verification
+The app rescans when search opens; it does not maintain a filesystem watcher or
+benchmark large address books. There is no plugin system, file-content search,
+or automatic updater. Builds target the current machine's architecture.
 
-Iron Search's Ghostty instance disables window restoration and working-directory inheritance, and explicitly creates an initial window. This prevents old tabs (including tabs left by earlier launches) from replacing the intended Codex session. These are per-launch arguments; the regular Ghostty configuration is not edited.
+## Contributing
 
-```sh
-bash scripts/test.sh
-```
+Small, focused improvements are welcome. Explain the behaviour being changed,
+add a regression check for ranking or input changes, and run
+`bash scripts/test.sh` plus a local build. For UI changes, include the relevant
+manual checks from [verification.md](docs/verification.md). Use synthetic contact
+data in reports. Keep the dependency-free core independent of AppKit and Contacts.
 
-This runs dependency-free checks for ranking, abbreviations, accent normalization, contact field searches, phone normalization, scope filtering, recents, limits, empty results, Codex trigger boundaries, mode transitions, launch arguments, and literal prompt handling through the shell. Contacts permissions, global keyboard behavior, and the Ghostty handoff also need interactive verification on the target Mac.
-
-## Structure
-
-- `Sources/SearchCore`: searchable records and deterministic ranking.
-- `Sources/IronSearch`: native SwiftUI search panel, AppKit lifecycle, global hotkey, application indexing, and Contacts integration.
-- `Resources/Info.plist`: app identity and Contacts permission description.
-- `Resources/AppIcon.icns`: native multi-resolution app icon; `scripts/make-icon.swift` generates standard and Retina sizes from the approved artwork in `Resources/AppIcon.png` during builds.
-- `scripts/build.sh`: builds and signs `dist/Iron Search.app`.
-
-Inspired by the quick keyboard-driven launcher interaction in [Alfred](https://www.alfredapp.com/) and Spotlight, with a deliberately small scope.
+See [the full usage guide](docs/usage.md) for signing, indexing, permissions, and
+terminal integration details.

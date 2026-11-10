@@ -30,7 +30,7 @@ public enum CodexLaunch {
               !prompt.contains("\0") else { return nil }
         let command = ["/bin/zsh", "-lc",
                 "exec \"$@\"", "iron-search", executable,
-                "--yolo", "--search", "--cd", directory, "--", prompt]
+                "--search", "--cd", directory, "--", prompt]
             .map { "'" + $0.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
             .joined(separator: " ")
         return ["--working-directory=\(directory)", "--initial-command=shell:\(command)",

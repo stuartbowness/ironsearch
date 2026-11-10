@@ -119,7 +119,7 @@ struct SearchEngineTests {
         XCTAssertTrue(args.contains("--window-inherit-working-directory=false"))
         XCTAssertEqual(args[0], "--working-directory=/working folder")
         XCTAssertTrue(args[1].hasPrefix("--initial-command=shell:"))
-        XCTAssertTrue(args[1].contains("'/path with spaces/codex' '--yolo' '--search' '--cd' '/working folder' '--'"))
+        XCTAssertTrue(args[1].contains("'/path with spaces/codex' '--search' '--cd' '/working folder' '--'"))
         XCTAssertTrue(args.allSatisfy { $0.hasPrefix("--") && $0.contains("=") })
     }
 
@@ -136,6 +136,6 @@ struct SearchEngineTests {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
-        XCTAssertEqual(String(decoding: data, as: UTF8.self), "--yolo --search --cd /tmp/test folder -- \(prompt)\n")
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), "--search --cd /tmp/test folder -- \(prompt)\n")
     }
 }
